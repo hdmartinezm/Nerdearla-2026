@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nerdearla Quiz — Organizador</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Question builder ─────────────────────── */
+    .question-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .question-block .q-number {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--purple2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .option-row input[type="text"] { flex: 1; }
+    .option-color-dot {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-0 { background: #e63946; }
+    .dot-1 { background: #1d7dd4; }
+    .dot-2 { background: #f4a226; }
+    .dot-3 { background: #2dc653; }
+
+    .correct-radio {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border: 2px solid var(--muted);
+      border-radius: 50%;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .correct-radio:checked {
+      border-color: var(--green);
+      background: var(--green);
+    }
+    .correct-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .remove-q-btn {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(255,71,87,0.15);
+      border: none;
+      border-radius: 8px;
+      color: var(--red);
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .remove-q-btn:hover { background: rgba(255,71,87,0.3); }
+
+    /* ── Live answer progress ─────────────────── */
+    .answer-progress {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .answer-progress .count {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--cyan);
+    }
+    .answer-progress .label {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .progress-bar-wrap {
+      flex: 1;
+      height: 8px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--purple), var(--cyan));
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="container">
+
+    <!-- Logo -->
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <h1>Nerdearla Quiz</h1>
+        <div class="subtitle">Panel del Organizador</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 1: Build the quiz
+         ════════════════════════════════════ -->
+    <div id="screen-build" class="screen active">
+
+      <div class="card">
+        <h2>📝 Crear preguntas</h2>
+
+        <div id="questions-list">
+          <!-- Questions injected by JS -->
+        </div>
+
+        <button class="btn btn-ghost btn-full" id="add-question-btn" style="margin-top:4px;">
+          ＋ Agregar pregunta
+        </button>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="create-room-btn" style="font-size:1.05rem; padding:16px;">
+        🚀 Crear sala y obtener código
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 2: Lobby — waiting for players
+         ════════════════════════════════════ -->
+    <div id="screen-lobby" class="screen">
+
+      <div class="card game-code">
+        <div class="label">Código de sala</div>
+        <div class="code" id="room-code-display">------</div>
+        <div class="url-hint">
+          Los jugadores entran en: <strong id="play-url">...</strong>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>👥 Jugadores conectados (<span id="player-count">0</span>)</h2>
+        <div class="player-chips" id="player-chips"></div>
+      </div>
+
+      <button class="btn btn-success btn-full" id="start-game-btn" disabled style="font-size:1.05rem; padding:16px;">
+        ▶ Iniciar partida
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 3: Question in progress
+         ════════════════════════════════════ -->
+    <div id="screen-question" class="screen">
+
+      <div class="card">
+        <div class="question-header">
+          <div class="question-badge" id="q-badge">Pregunta 1 / 5</div>
+          <div class="timer-text" id="org-timer">30</div>
+          <div class="timer-bar-wrap">
+            <div class="timer-bar" id="org-timer-bar" style="width:100%"></div>
+          </div>
+          <div class="question-text" id="org-question-text">...</div>
+        </div>
+
+        <!-- Live answer progress -->
+        <div class="answer-progress">
+          <div>
+            <div class="count"><span id="answered-count">0</span>/<span id="total-players">0</span></div>
+            <div class="label">respondieron</div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar" id="answer-progress-bar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Answer distribution bars -->
+        <div class="answer-bar" id="answer-bar">
+          <div class="answer-bar-col opt-0" id="bar-0" style="height:4px">0</div>
+          <div class="answer-bar-col opt-1" id="bar-1" style="height:4px">0</div>
+          <div class="answer-bar-col opt-2" id="bar-2" style="height:4px">0</div>
+          <div class="answer-bar-col opt-3" id="bar-3" style="height:4px">0</div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost btn-full" id="force-next-btn">
+        ⏭ Terminar pregunta ahora
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 4: Results for this question
+         ════════════════════════════════════ -->
+    <div id="screen-results" class="screen">
+
+      <div class="card">
+        <h2>✅ Respuesta correcta</h2>
+        <div id="correct-answer-display" style="font-size:1.2rem; font-weight:800; color:var(--green); margin-bottom:16px;">—</div>
+
+        <div style="font-size:0.85rem; color:var(--muted); margin-bottom:6px;">Distribución de respuestas</div>
+        <div class="answer-bar" id="results-bar">
+          <div class="answer-bar-col opt-0" id="rbar-0" style="height:4px">0</div>
+          <div class="answer-bar-col opt-1" id="rbar-1" style="height:4px">0</div>
+          <div class="answer-bar-col opt-2" id="rbar-2" style="height:4px">0</div>
+          <div class="answer-bar-col opt-3" id="rbar-3" style="height:4px">0</div>
+        </div>
+        <div id="correct-count-label" style="font-size:0.85rem; color:var(--muted); margin-top:8px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Top 5</h2>
+        <ol class="ranking-list" id="mid-ranking"></ol>
+      </div>
+
+      <div style="text-align:center; color:var(--muted); font-size:0.85rem; margin-top:8px;">
+        Siguiente pregunta en <span id="results-countdown">5</span>s...
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 5: Final ranking
+         ════════════════════════════════════ -->
+    <div id="screen-final" class="screen">
+
+      <div class="card" style="text-align:center; padding:32px;">
+        <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+        <h2 style="justify-content:center; font-size:1.4rem; margin-bottom:4px;">¡Partida terminada!</h2>
+        <div style="color:var(--muted); font-size:0.88rem;">Ranking final</div>
+      </div>
+
+      <div class="card">
+        <ol class="ranking-list" id="final-ranking"></ol>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="new-game-btn" style="font-size:1rem; padding:15px;">
+        🔄 Nueva partida
+      </button>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /page -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="organizer.js"></script>
+</body>
+</html>

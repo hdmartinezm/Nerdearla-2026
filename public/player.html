@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Nerdearla Quiz — Jugar</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Player-specific overrides for mobile comfort */
+    body { touch-action: manipulation; }
+
+    .page {
+      padding: 20px 14px 32px;
+      justify-content: flex-start;
+    }
+
+    .logo { margin-bottom: 24px; }
+
+    /* Join form */
+    #screen-join .card { margin-bottom: 16px; }
+
+    /* Waiting room */
+    .waiting-room {
+      text-align: center;
+      padding: 32px 20px;
+    }
+    .waiting-room .avatar {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      margin: 0 auto 20px;
+      box-shadow: 0 0 0 6px rgba(108,59,255,0.2);
+    }
+    .waiting-room .player-name {
+      font-size: 1.4rem;
+      font-weight: 800;
+    }
+    .waiting-room .waiting-msg {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 8px;
+    }
+
+    /* Answered state */
+    .answered-overlay {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .answered-overlay .big-icon { font-size: 4rem; margin-bottom: 16px; }
+    .answered-overlay .answered-label {
+      font-size: 1rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .answered-overlay .answered-points {
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--yellow);
+    }
+    .answered-overlay .score-total {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* Results screen (player) */
+    .player-results {
+      text-align: center;
+      padding: 20px;
+    }
+    .player-results .correct-answer {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--green);
+      margin-bottom: 16px;
+    }
+
+    /* Final screen (player) */
+    .player-final { text-align: center; padding: 20px; }
+    .player-final .my-rank {
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--yellow);
+      line-height: 1;
+    }
+    .player-final .my-score {
+      font-size: 1.1rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="container" style="max-width:480px;">
+
+    <!-- Logo -->
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <h1>Nerdearla Quiz</h1>
+        <div class="subtitle">¡A jugar!</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 1: Join
+         ════════════════════════════════════ -->
+    <div id="screen-join" class="screen active">
+      <div class="card">
+        <h2>🎮 Unirse a la partida</h2>
+        <div class="field">
+          <label>Código de sala</label>
+          <input type="text" id="code-input" placeholder="XXXXXX" maxlength="6"
+            autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+            style="font-size:1.6rem; font-weight:800; text-align:center; letter-spacing:0.2em; text-transform:uppercase;" />
+        </div>
+        <div class="field">
+          <label>Tu nombre</label>
+          <input type="text" id="name-input" placeholder="Ingresá tu nombre" maxlength="24"
+            autocomplete="off" />
+        </div>
+        <button class="btn btn-primary btn-full" id="join-btn" style="margin-top:8px; padding:15px; font-size:1rem;">
+          🚀 Entrar
+        </button>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 2: Waiting room
+         ════════════════════════════════════ -->
+    <div id="screen-waiting" class="screen">
+      <div class="card">
+        <div class="waiting-room">
+          <div class="avatar" id="player-avatar">😎</div>
+          <div class="player-name" id="waiting-name">—</div>
+          <div class="waiting-msg">
+            Esperá que el organizador inicie el juego<span class="waiting-dots"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 3: Active question
+         ════════════════════════════════════ -->
+    <div id="screen-question" class="screen">
+      <div class="card" style="padding:20px;">
+        <div class="question-header">
+          <div class="question-badge" id="p-q-badge">Pregunta 1/5</div>
+          <div class="timer-text" id="p-timer">30</div>
+          <div class="timer-bar-wrap">
+            <div class="timer-bar" id="p-timer-bar" style="width:100%"></div>
+          </div>
+          <div class="question-text" id="p-question-text">Cargando...</div>
+        </div>
+      </div>
+
+      <!-- 4 option buttons -->
+      <div class="options-grid" id="options-grid">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Answered state (hidden until player answers) -->
+      <div class="answered-overlay" id="answered-overlay" style="display:none;">
+        <div class="big-icon" id="answered-icon">⏳</div>
+        <div class="answered-label" id="answered-label">Respondido</div>
+        <div class="answered-points" id="answered-points">+0</div>
+        <div class="score-total" id="score-total">Total: 0 pts</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 4: Question results (player)
+         ════════════════════════════════════ -->
+    <div id="screen-results" class="screen">
+      <div class="card">
+        <div class="player-results">
+          <div style="font-size:0.85rem; color:var(--muted); margin-bottom:6px;">Respuesta correcta</div>
+          <div class="correct-answer" id="p-correct-answer">—</div>
+
+          <div style="font-size:0.85rem; color:var(--muted); margin-bottom:4px;">
+            <span id="p-correct-count">0</span> de <span id="p-total-players">0</span> acertaron
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Top 5</h2>
+        <ol class="ranking-list" id="p-mid-ranking"></ol>
+      </div>
+
+      <div style="text-align:center; color:var(--muted); font-size:0.85rem; margin-top:4px;">
+        Siguiente pregunta en <span id="p-results-countdown">5</span>s...
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 5: Final ranking (player)
+         ════════════════════════════════════ -->
+    <div id="screen-final" class="screen">
+      <div class="card" style="text-align:center; padding:32px;">
+        <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+        <div style="font-size:1.1rem; font-weight:700; margin-bottom:4px;">¡Terminó la partida!</div>
+        <div style="color:var(--muted); font-size:0.85rem; margin-bottom:20px;">Tu resultado</div>
+        <div class="my-rank" id="my-rank">—</div>
+        <div class="my-score" id="my-score">0 pts</div>
+      </div>
+
+      <div class="card">
+        <h2>🏅 Ranking Final</h2>
+        <ol class="ranking-list" id="p-final-ranking"></ol>
+      </div>
+
+      <button class="btn btn-ghost btn-full" id="play-again-btn" style="margin-top:4px;">
+        🔄 Jugar de nuevo
+      </button>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /page -->
+
+<!-- Feedback overlay -->
+<div class="feedback-overlay" id="feedback-overlay">
+  <div class="feedback-icon" id="feedback-icon">✅</div>
+  <div class="feedback-points" id="feedback-pts">+500</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="player.js"></script>
+</body>
+</html>

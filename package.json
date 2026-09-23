@@ -1,0 +1,21 @@
+{
+  "name": "nerdearla-quiz",
+  "version": "1.0.0",
+  "description": "Real-time Kahoot-style quiz game for Nerdearla 2026",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "nodemon server/app.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "4.22.3",
+    "socket.io": "4.8.3",
+    "uuid": "11.0.5"
+  },
+  "devDependencies": {
+    "nodemon": "3.0.1"
+  }
+}
