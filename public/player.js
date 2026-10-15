@@ -2,7 +2,7 @@
    NERDEARLA QUIZ — Player logic
    ============================================================ */
 
-const socket = io();
+const socket = io('/player');
 
 // ── State ──────────────────────────────────────────────────
 let myName = '';

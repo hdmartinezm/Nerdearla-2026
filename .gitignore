@@ -1,8 +1,43 @@
-node_modules/
-*.zip
-.gigignore
 prompt.txt
-# Elastic Beanstalk Files
+*.zip
+
+# Dependencias de Node.js
+node_modules/
+
+# Variables de entorno y secretos locales
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs y reportes de diagnostico
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Archivos temporales y cache
+.npm/
+.cache/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+*.pid
+*.pid.lock
+
+# macOS
+.DS_Store
+._*
+
+# Archivos temporales del editor
+*.swp
+*.swo
+*~
+
+# Elastic Beanstalk: conservar configuraciones reutilizables
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml

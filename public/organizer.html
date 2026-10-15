@@ -115,6 +115,12 @@
         <h1>Nerdearla Quiz</h1>
         <div class="subtitle">Panel del Organizador</div>
       </div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+        <span id="user-display" style="font-size:0.82rem; color:var(--muted);"></span>
+        <a href="/logout" class="btn btn-ghost" style="padding:7px 14px; font-size:0.82rem; text-decoration:none;">
+          Salir
+        </a>
+      </div>
     </div>
 
     <!-- ════════════════════════════════════
@@ -235,6 +241,37 @@
          SCREEN 5: Final ranking
          ════════════════════════════════════ -->
     <div id="screen-final" class="screen">
+
+      <div class="card" style="text-align:center; padding:32px;">
+        <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+        <h2 style="justify-content:center; font-size:1.4rem; margin-bottom:4px;">¡Partida terminada!</h2>
+        <div style="color:var(--muted); font-size:0.88rem;">Ranking final</div>
+      </div>
+
+      <div class="card">
+        <ol class="ranking-list" id="final-ranking"></ol>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="new-game-btn" style="font-size:1rem; padding:15px;">
+        🔄 Nueva partida
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════
+         SCREEN 6: Sesión expirada
+         ════════════════════════════════════ -->
+    <div id="screen-expired" class="screen">
+      <div class="card" style="text-align:center; padding:40px;">
+        <div style="font-size:3rem; margin-bottom:12px;">🔒</div>
+        <h2 style="justify-content:center; font-size:1.3rem; margin-bottom:8px;">Sesión expirada</h2>
+        <div style="color:var(--muted); font-size:0.88rem; margin-bottom:24px;">
+          Tu sesión de Cognito expiró o no es válida.
+        </div>
+        <a href="/logout" class="btn btn-primary" style="display:inline-block; text-decoration:none; padding:12px 28px;">
+          🔑 Volver a iniciar sesión
+        </a>
+      </div>
+    </div>
 
       <div class="card" style="text-align:center; padding:32px;">
         <div style="font-size:3rem; margin-bottom:12px;">🎉</div>

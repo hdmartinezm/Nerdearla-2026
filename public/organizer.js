@@ -1,10 +1,18 @@
 /* ============================================================
    NERDEARLA QUIZ — Organizer logic
+   ============================================================
+   Autenticación:
+   - El id_token de Cognito vive en una cookie httpOnly (el server lo maneja).
+   - Para pasarlo a Socket.IO (que no puede leer cookies httpOnly),
+     el servidor expone GET /me que devuelve {username, email} si la sesión
+     es válida. Si no lo es, redirige a /logout.
+   - La conexión Socket.IO usa el namespace /organizer que requiere auth.
+     Pasamos un flag `authenticated: true` en el handshake — el servidor
+     ya validó la cookie en la ruta GET /, así que confiamos en la sesión.
    ============================================================ */
 
-const socket = io();
-
-// ── State ──────────────────────────────────────────────────
+// ── Estado ─────────────────────────────────────────────────
+let socket = null;
 let questionCount = 0;
 let timerInterval = null;
 let resultsInterval = null;
@@ -13,7 +21,6 @@ let currentTimerLimit = 0;
 let answeredCount = 0;
 let totalPlayers = 0;
 
-// Track option counts per question for the live bar
 const liveAnswerCounts = [0, 0, 0, 0];
 
 // ── Screen helpers ─────────────────────────────────────────
@@ -23,6 +30,7 @@ const screens = {
   question: document.getElementById('screen-question'),
   results:  document.getElementById('screen-results'),
   final:    document.getElementById('screen-final'),
+  expired:  document.getElementById('screen-expired'),
 };
 
 function showScreen(name) {
@@ -40,8 +48,48 @@ function showToast(msg, type = 'error') {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
 }
 
+// ── Init: verificar sesión y conectar Socket.IO ────────────
+async function init() {
+  try {
+    const res = await fetch('/me');
+    if (!res.ok) {
+      // Sesión inválida — mostrar pantalla de expiración
+      showScreen('expired');
+      return;
+    }
+
+    const user = await res.json();
+
+    // Mostrar nombre del usuario en el header
+    const userDisplay = document.getElementById('user-display');
+    if (userDisplay) userDisplay.textContent = user.username || user.email;
+
+    // Conectar al namespace /organizer
+    // La cookie httpOnly ya valida la sesión en el GET /,
+    // pero Socket.IO no puede leerla. Usamos withCredentials para
+    // enviar la cookie en el handshake HTTP (polling) y pasamos
+    // el username como identificador en auth.
+    socket = io('/organizer', {
+      withCredentials: true,
+      auth: { username: user.username },
+    });
+
+    socket.on('connect_error', (err) => {
+      if (err.message === 'AUTH_REQUIRED' || err.message === 'AUTH_INVALID') {
+        showScreen('expired');
+      } else {
+        showToast('Error de conexión. Recarga la página.');
+      }
+    });
+
+    registerSocketEvents();
+
+  } catch {
+    showScreen('expired');
+  }
+}
+
 // ── Question builder ───────────────────────────────────────
-const OPTION_ICONS = ['🔴', '🔵', '🟡', '🟢'];
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 const DEFAULT_TIME = 30;
 
@@ -68,7 +116,7 @@ function createQuestionBlock() {
     </div>
 
     <div class="field">
-      <label>Opciones — marcá la correcta ✓</label>
+      <label>Opciones — marca la correcta ✓</label>
       ${[0,1,2,3].map(i => `
         <div class="option-row">
           <span class="option-color-dot dot-${i}"></span>
@@ -130,89 +178,137 @@ function collectQuestions() {
   return questions;
 }
 
-// ── Create room ────────────────────────────────────────────
-document.getElementById('create-room-btn').addEventListener('click', () => {
-  const questions = collectQuestions();
-  const btn = document.getElementById('create-room-btn');
-  btn.disabled = true;
-  btn.textContent = 'Creando sala...';
+// ── Register all Socket.IO events ─────────────────────────
+function registerSocketEvents() {
 
-  socket.emit('create_room', questions, (res) => {
-    btn.disabled = false;
-    btn.innerHTML = '🚀 Crear sala y obtener código';
+  // ── Create room ──────────────────────────────────────────
+  document.getElementById('create-room-btn').addEventListener('click', () => {
+    const questions = collectQuestions();
+    const btn = document.getElementById('create-room-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creando sala...';
 
-    if (res.error) return showToast(res.error);
+    socket.emit('create_room', questions, (res) => {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 Crear sala y obtener código';
 
-    // Show lobby
-    document.getElementById('room-code-display').textContent = res.code;
-    const host = window.location.host;
-    document.getElementById('play-url').textContent = `${host}/play`;
+      if (res.error) return showToast(res.error);
 
-    showScreen('lobby');
-  });
-});
+      document.getElementById('room-code-display').textContent = res.code;
+      const host = window.location.host;
+      document.getElementById('play-url').textContent = `${host}/play`;
 
-// ── Lobby: player events ───────────────────────────────────
-socket.on('player_joined', ({ playerCount, players }) => {
-  totalPlayers = playerCount;
-  document.getElementById('player-count').textContent = playerCount;
-
-  const chips = document.getElementById('player-chips');
-  chips.innerHTML = '';
-  players.forEach(name => {
-    const chip = document.createElement('span');
-    chip.className = 'player-chip';
-    chip.textContent = name;
-    chips.appendChild(chip);
+      showScreen('lobby');
+    });
   });
 
-  document.getElementById('start-game-btn').disabled = playerCount === 0;
-});
-
-socket.on('player_left', ({ playerCount, players }) => {
-  totalPlayers = playerCount;
-  document.getElementById('player-count').textContent = playerCount;
-
-  const chips = document.getElementById('player-chips');
-  chips.innerHTML = '';
-  players.forEach(name => {
-    const chip = document.createElement('span');
-    chip.className = 'player-chip';
-    chip.textContent = name;
-    chips.appendChild(chip);
+  // ── Lobby: player events ─────────────────────────────────
+  socket.on('player_joined', ({ playerCount, players }) => {
+    totalPlayers = playerCount;
+    document.getElementById('player-count').textContent = playerCount;
+    renderPlayerChips(players);
+    document.getElementById('start-game-btn').disabled = playerCount === 0;
   });
 
-  document.getElementById('start-game-btn').disabled = playerCount === 0;
-});
-
-// ── Start game ─────────────────────────────────────────────
-document.getElementById('start-game-btn').addEventListener('click', () => {
-  socket.emit('start_game', (res) => {
-    if (res?.error) showToast(res.error);
+  socket.on('player_left', ({ playerCount, players }) => {
+    totalPlayers = playerCount;
+    document.getElementById('player-count').textContent = playerCount;
+    renderPlayerChips(players);
+    document.getElementById('start-game-btn').disabled = playerCount === 0;
   });
-});
 
-// ── New question received ──────────────────────────────────
-socket.on('new_question', (data) => {
-  stopTimers();
-  answeredCount = 0;
+  // ── Start game ───────────────────────────────────────────
+  document.getElementById('start-game-btn').addEventListener('click', () => {
+    socket.emit('start_game', (res) => {
+      if (res?.error) showToast(res.error);
+    });
+  });
 
-  // Reset live answer bars
-  liveAnswerCounts.fill(0);
-  for (let i = 0; i < 4; i++) {
-    const bar = document.getElementById(`bar-${i}`);
-    if (bar) { bar.style.height = '4px'; bar.textContent = '0'; }
-  }
+  // ── New question ─────────────────────────────────────────
+  socket.on('new_question', (data) => {
+    stopTimers();
+    answeredCount = 0;
 
-  document.getElementById('q-badge').textContent = `Pregunta ${data.index + 1} / ${data.total}`;
-  document.getElementById('org-question-text').textContent = data.text;
-  document.getElementById('answered-count').textContent = '0';
-  document.getElementById('total-players').textContent = totalPlayers;
-  document.getElementById('answer-progress-bar').style.width = '0%';
+    liveAnswerCounts.fill(0);
+    for (let i = 0; i < 4; i++) {
+      const bar = document.getElementById(`bar-${i}`);
+      if (bar) { bar.style.height = '4px'; bar.textContent = '0'; }
+    }
 
-  showScreen('question');
-  startOrgTimer(data.timeLimit);
-});
+    document.getElementById('q-badge').textContent = `Pregunta ${data.index + 1} / ${data.total}`;
+    document.getElementById('org-question-text').textContent = data.text;
+    document.getElementById('answered-count').textContent = '0';
+    document.getElementById('total-players').textContent = totalPlayers;
+    document.getElementById('answer-progress-bar').style.width = '0%';
+
+    showScreen('question');
+    startOrgTimer(data.timeLimit);
+  });
+
+  // ── Live answer tracking ─────────────────────────────────
+  socket.on('answer_update', ({ answered, total }) => {
+    answeredCount = answered;
+    totalPlayers = total;
+    document.getElementById('answered-count').textContent = answered;
+    document.getElementById('total-players').textContent = total;
+    const pct = total > 0 ? (answered / total) * 100 : 0;
+    document.getElementById('answer-progress-bar').style.width = `${pct}%`;
+  });
+
+  // ── Force next ───────────────────────────────────────────
+  document.getElementById('force-next-btn').addEventListener('click', () => {
+    socket.emit('force_next');
+  });
+
+  // ── Question results ─────────────────────────────────────
+  socket.on('question_results', (data) => {
+    stopTimers();
+
+    document.getElementById('correct-answer-display').textContent = data.correctText;
+
+    const maxCount = Math.max(1, ...data.answersCount);
+    for (let i = 0; i < 4; i++) {
+      const bar = document.getElementById(`rbar-${i}`);
+      if (!bar) continue;
+      const count = data.answersCount[i] || 0;
+      const heightPct = (count / maxCount) * 74 + 6;
+      bar.style.height = `${heightPct}px`;
+      bar.textContent = count;
+    }
+
+    document.getElementById('correct-count-label').textContent =
+      `${data.correctCount} de ${data.totalPlayers} respondieron correctamente`;
+
+    renderRankingList(data.ranking, 'mid-ranking');
+
+    showScreen('results');
+
+    let cd = 5;
+    document.getElementById('results-countdown').textContent = cd;
+    resultsInterval = setInterval(() => {
+      cd--;
+      document.getElementById('results-countdown').textContent = cd;
+      if (cd <= 0) clearInterval(resultsInterval);
+    }, 1000);
+  });
+
+  // ── Final ranking ────────────────────────────────────────
+  socket.on('game_finished', ({ ranking }) => {
+    stopTimers();
+    renderRankingList(ranking, 'final-ranking');
+    showScreen('final');
+  });
+
+  // ── Error ────────────────────────────────────────────────
+  socket.on('game_error', (msg) => {
+    showToast(msg, 'error');
+  });
+
+  // ── New game ─────────────────────────────────────────────
+  document.getElementById('new-game-btn').addEventListener('click', () => {
+    window.location.reload();
+  });
+}
 
 // ── Timer for organizer ────────────────────────────────────
 function startOrgTimer(seconds) {
@@ -230,10 +326,7 @@ function startOrgTimer(seconds) {
     timerText.textContent = currentTimerSeconds;
     const pct = (currentTimerSeconds / currentTimerLimit) * 100;
     timerBar.style.width = `${Math.max(0, pct)}%`;
-
-    if (currentTimerSeconds <= 0) {
-      clearInterval(timerInterval);
-    }
+    if (currentTimerSeconds <= 0) clearInterval(timerInterval);
   }, 1000);
 }
 
@@ -242,65 +335,18 @@ function stopTimers() {
   clearInterval(resultsInterval);
 }
 
-// ── Live answer tracking ───────────────────────────────────
-socket.on('answer_update', ({ answered, total }) => {
-  answeredCount = answered;
-  totalPlayers = total;
+// ── Render helpers ─────────────────────────────────────────
+function renderPlayerChips(players) {
+  const chips = document.getElementById('player-chips');
+  chips.innerHTML = '';
+  players.forEach(name => {
+    const chip = document.createElement('span');
+    chip.className = 'player-chip';
+    chip.textContent = name;
+    chips.appendChild(chip);
+  });
+}
 
-  document.getElementById('answered-count').textContent = answered;
-  document.getElementById('total-players').textContent = total;
-  const pct = total > 0 ? (answered / total) * 100 : 0;
-  document.getElementById('answer-progress-bar').style.width = `${pct}%`;
-});
-
-// ── Force next ─────────────────────────────────────────────
-document.getElementById('force-next-btn').addEventListener('click', () => {
-  socket.emit('force_next');
-});
-
-// ── Question results ───────────────────────────────────────
-socket.on('question_results', (data) => {
-  stopTimers();
-
-  document.getElementById('correct-answer-display').textContent = `${data.correctText}`;
-
-  // Build result bars
-  const maxCount = Math.max(1, ...data.answersCount);
-  for (let i = 0; i < 4; i++) {
-    const bar = document.getElementById(`rbar-${i}`);
-    if (!bar) continue;
-    const count = data.answersCount[i] || 0;
-    const heightPct = (count / maxCount) * 74 + 6;
-    bar.style.height = `${heightPct}px`;
-    bar.textContent = count;
-  }
-
-  document.getElementById('correct-count-label').textContent =
-    `${data.correctCount} de ${data.totalPlayers} respondieron correctamente`;
-
-  // Mid-game ranking
-  renderRankingList(data.ranking, 'mid-ranking');
-
-  showScreen('results');
-
-  // Countdown
-  let cd = 5;
-  document.getElementById('results-countdown').textContent = cd;
-  resultsInterval = setInterval(() => {
-    cd--;
-    document.getElementById('results-countdown').textContent = cd;
-    if (cd <= 0) clearInterval(resultsInterval);
-  }, 1000);
-});
-
-// ── Final ranking ──────────────────────────────────────────
-socket.on('game_finished', ({ ranking }) => {
-  stopTimers();
-  renderRankingList(ranking, 'final-ranking');
-  showScreen('final');
-});
-
-// ── Render ranking list ────────────────────────────────────
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 function renderRankingList(ranking, containerId) {
@@ -318,17 +364,9 @@ function renderRankingList(ranking, containerId) {
   });
 }
 
-// ── Error ──────────────────────────────────────────────────
-socket.on('game_error', (msg) => {
-  showToast(msg, 'error');
-});
-
-// ── New game ───────────────────────────────────────────────
-document.getElementById('new-game-btn').addEventListener('click', () => {
-  window.location.reload();
-});
-
-// ── Util ───────────────────────────────────────────────────
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── Arrancar ───────────────────────────────────────────────
+init();
